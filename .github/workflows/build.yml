@@ -22,6 +22,144 @@ jobs:
           cp -r fabric-example-mod-1.21/* .
           chmod +x gradlew
 
+      - name: Inject MusoVisuals Source Code
+        run: |
+          mkdir -p src/main/java/com/muso/visuals/config
+          mkdir -p src/main/java/com/muso/visuals/hud
+
+          cat << 'EOF' > src/main/java/com/muso/visuals/config/VisualConfig.java
+          package com.muso.visuals.config;
+          public class VisualConfig {
+              public static boolean enabled = true;
+              public static boolean targetHud = true;
+          }
+          EOF
+
+          cat << 'EOF' > src/main/java/com/muso/visuals/hud/VisualsHud.java
+          package com.muso.visuals.hud;
+          import com.muso.visuals.config.VisualConfig;
+          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.minecraft.client.MinecraftClient;
+          import net.minecraft.client.gui.DrawContext;
+
+          public class VisualsHud implements HudRenderCallback {
+              @Override
+              public void onHudRender(DrawContext drawContext, float tickDelta) {
+                  if (!VisualConfig.enabled) return;
+                  MinecraftClient mc = MinecraftClient.getInstance();
+                  if (mc.player == null) return;
+                  drawContext.drawText(mc.textRenderer, "§b§l[MusoVisuals] §aВКЛ", 10, 10, 0xFFFFFFFF, true);
+                  drawContext.drawText(mc.textRenderer, "§7FPS: §f" + mc.getCurrentFps(), 10, 22, 0xFFFFFFFF, true);
+              }
+          }
+          EOF
+
+          cat << 'EOF' > src/main/java/com/muso/visuals/hud/TargetHudOverlay.java
+          package com.muso.visuals.hud;
+          import com.muso.visuals.config.VisualConfig;
+          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.minecraft.client.MinecraftClient;
+          import net.minecraft.client.gui.DrawContext;
+          import net.minecraft.entity.LivingEntity;
+          import net.minecraft.util.hit.EntityHitResult;
+          import net.minecraft.util.hit.HitResult;
+
+          public class TargetHudOverlay implements HudRenderCallback {
+              @Override
+              public void onHudRender(DrawContext drawContext, float tickDelta) {
+                  if (!VisualConfig.enabled || !VisualConfig.targetHud) return;
+                  MinecraftClient mc = MinecraftClient.getInstance();
+                  if (mc.player == null || mc.world == null) return;
+                  HitResult hit = mc.crosshairTarget;
+                  if (hit != null && hit.getType() == HitResult.Type.ENTITY) {
+                      EntityHitResult entityHit = (EntityHitResult) hit;
+                      if (entityHit.getEntity() instanceof LivingEntity target) {
+                          int x = drawContext.getScaledWindowWidth() / 2 + 15;
+                          int y = drawContext.getScaledWindowHeight() / 2 - 15;
+                          drawContext.fill(x, y, x + 140, y + 40, 0xCC0D1117);
+                          drawContext.fill(x - 1, y - 1, x + 141, y, 0xFF58A6FF);
+                          drawContext.drawText(mc.textRenderer, target.getDisplayName().getString(), x + 8, y + 6, 0xFFFFFFFF, true);
+                          float hp = target.getHealth();
+                          float maxHp = target.getMaxHealth();
+                          int barWidth = (int) Math.min(124, Math.max(0, (hp / maxHp) * 124));
+                          drawContext.fill(x + 8, y + 24, x + 132, y + 32, 0xFF21262D);
+                          drawContext.fill(x + 8, y + 24, x + 8 + barWidth, y + 32, 0xFF238636);
+                          drawContext.drawText(mc.textRenderer, String.format("%.1f HP", hp), x + 8, y + 14, 0xFF79C0FF, false);
+                      }
+                  }
+              }
+          }
+          EOF
+
+          cat << 'EOF' > src/main/java/com/muso/visuals/MusoVisualsClient.java
+          package com.muso.visuals;
+          import com.muso.visuals.config.VisualConfig;
+          import com.muso.visuals.hud.TargetHudOverlay;
+          import com.muso.visuals.hud.VisualsHud;
+          import net.fabricmc.api.ClientModInitializer;
+          import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+          import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+          import net.minecraft.client.option.KeyBinding;
+          import net.minecraft.client.util.InputUtil;
+          import net.minecraft.text.Text;
+          import org.lwjgl.glfw.GLFW;
+
+          public class MusoVisualsClient implements ClientModInitializer {
+              private static KeyBinding toggleKey;
+
+              @Override
+              public void onInitializeClient() {
+                  toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                          "key.musovisuals.toggle",
+                          InputUtil.Type.KEYSYM,
+                          GLFW.GLFW_KEY_RIGHT_SHIFT,
+                          "category.musovisuals"
+                  ));
+                  HudRenderCallback.EVENT.register(new VisualsHud());
+                  HudRenderCallback.EVENT.register(new TargetHudOverlay());
+                  ClientTickEvents.END_CLIENT_TICK.register(client -> {
+                      while (toggleKey.wasPressed()) {
+                          VisualConfig.enabled = !VisualConfig.enabled;
+                          if (client.player != null) {
+                              client.player.sendMessage(
+                                  Text.literal("§b[MusoVisuals] §fВизуалы: " + (VisualConfig.enabled ? "§aВКЛ" : "§cВЫКЛ")),
+                                  true
+                              );
+                          }
+                      }
+                  });
+              }
+          }
+          EOF
+
+          cat << 'EOF' > src/main/resources/fabric.mod.json
+          {
+            "schemaVersion": 1,
+            "id": "musovisuals",
+            "version": "1.0.0",
+            "name": "MusoVisuals",
+            "description": "Muso Visuals Mod for 1.21.1",
+            "authors": ["Muso"],
+            "contact": {},
+            "license": "MIT",
+            "icon": "assets/modid/icon.png",
+            "environment": "client",
+            "entrypoints": {
+              "client": [
+                "com.muso.visuals.MusoVisualsClient"
+              ]
+            },
+            "mixins": [],
+            "depends": {
+              "fabricloader": ">=0.15.0",
+              "minecraft": "~1.21.1",
+              "java": ">=21",
+              "fabric-api": "*"
+            }
+          }
+          EOF
+
       - name: Build Mod Jar
         run: ./gradlew build -x test
 
