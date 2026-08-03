@@ -15,17 +15,15 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Clone Fabric Template
+      - name: Download Fabric Template
         run: |
-          git clone https://github.com/FabricMC/fabric-example-mod.git temp
-          cp -r temp/* .
-          rm -rf temp
+          curl -L -o template.zip https://github.com/FabricMC/fabric-example-mod/archive/refs/heads/1.21.zip
+          unzip template.zip
+          cp -r fabric-example-mod-1.21/* .
+          chmod +x gradlew
 
-      - name: Grant Execute Permission for Gradlew
-        run: chmod +x gradlew
-
-      - name: Build Mod
-        run: ./gradlew build
+      - name: Build Mod Jar
+        run: ./gradlew build -x test
 
       - name: Upload Mod Jar
         uses: actions/upload-artifact@v4
