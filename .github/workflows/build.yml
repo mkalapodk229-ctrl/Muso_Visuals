@@ -1,137 +1,17 @@
-name: Build MusoVisuals Mod
-
+name: Build Mod
 on: [push, workflow_dispatch]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
-      - name: Download Fabric Template
-        run: |
-          curl -L -o template.zip https://github.com/FabricMC/fabric-example-mod/archive/refs/heads/1.21.zip
-          unzip template.zip
-          cp -r fabric-example-mod-1.21/* .
-          chmod +x gradlew
-
-      - name: Inject MusoVisuals Code
-        run: |
-          rm -rf src/main/java/com/example/*
-          mkdir -p src/main/java/com/muso/visuals
-
-          cat << 'EOF' > src/main/java/com/muso/visuals/MusoVisualsClient.java
-          package com.muso.visuals;
-
-          import net.fabricmc.api.ClientModInitializer;
-          import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-          import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-          import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-          import net.minecraft.client.MinecraftClient;
-          import net.minecraft.client.option.KeyBinding;
-          import net.minecraft.client.util.InputUtil;
-          import net.minecraft.entity.LivingEntity;
-          import net.minecraft.text.Text;
-          import net.minecraft.util.hit.EntityHitResult;
-          import net.minecraft.util.hit.HitResult;
-          import org.lwjgl.glfw.GLFW;
-
-          public class MusoVisualsClient implements ClientModInitializer {
-              public static boolean enabled = true;
-              private static KeyBinding toggleKey;
-
-              @Override
-              public void onInitializeClient() {
-                  toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                          "key.musovisuals.toggle",
-                          InputUtil.Type.KEYSYM,
-                          GLFW.GLFW_KEY_RIGHT_SHIFT,
-                          "category.musovisuals"
-                  ));
-
-                  HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-                      if (!enabled) return;
-                      MinecraftClient mc = MinecraftClient.getInstance();
-                      if (mc.player == null) return;
-
-                      // Visual HUD
-                      drawContext.drawText(mc.textRenderer, "§b§l[MusoVisuals] §aВКЛ", 10, 10, 0xFFFFFFFF, true);
-                      drawContext.drawText(mc.textRenderer, "§7FPS: §f" + mc.getCurrentFps(), 10, 22, 0xFFFFFFFF, true);
-
-                      // Target HUD
-                      HitResult hit = mc.crosshairTarget;
-                      if (hit != null && hit.getType() == HitResult.Type.ENTITY) {
-                          EntityHitResult entityHit = (EntityHitResult) hit;
-                          if (entityHit.getEntity() instanceof LivingEntity target) {
-                              int x = drawContext.getScaledWindowWidth() / 2 + 15;
-                              int y = drawContext.getScaledWindowHeight() / 2 - 15;
-                              drawContext.fill(x, y, x + 140, y + 40, 0xCC0D1117);
-                              drawContext.fill(x - 1, y - 1, x + 141, y, 0xFF58A6FF);
-                              drawContext.drawText(mc.textRenderer, target.getDisplayName().getString(), x + 8, y + 6, 0xFFFFFFFF, true);
-                              float hp = target.getHealth();
-                              float maxHp = target.getMaxHealth();
-                              int barWidth = (int) Math.min(124, Math.max(0, (hp / maxHp) * 124));
-                              drawContext.fill(x + 8, y + 24, x + 132, y + 32, 0xFF21262D);
-                              drawContext.fill(x + 8, y + 24, x + 8 + barWidth, y + 32, 0xFF238636);
-                              drawContext.drawText(mc.textRenderer, String.format("%.1f HP", hp), x + 8, y + 14, 0xFF79C0FF, false);
-                          }
-                      }
-                  });
-
-                  ClientTickEvents.END_CLIENT_TICK.register(client -> {
-                      while (toggleKey.wasPressed()) {
-                          enabled = !enabled;
-                          if (client.player != null) {
-                              client.player.sendMessage(
-                                  Text.literal("§b[MusoVisuals] §fВизуалы: " + (enabled ? "§aВКЛ" : "§cВЫКЛ")),
-                                  true
-                              );
-                          }
-                      }
-                  });
-              }
-          }
-          EOF
-
-          cat << 'EOF' > src/main/resources/fabric.mod.json
-          {
-            "schemaVersion": 1,
-            "id": "musovisuals",
-            "version": "1.0.0",
-            "name": "MusoVisuals",
-            "description": "Muso Visuals Mod for 1.21.1",
-            "authors": ["Muso"],
-            "contact": {},
-            "license": "MIT",
-            "icon": "assets/modid/icon.png",
-            "environment": "client",
-            "entrypoints": {
-              "client": [
-                "com.muso.visuals.MusoVisualsClient"
-              ]
-            },
-            "mixins": [],
-            "depends": {
-              "fabricloader": ">=0.15.0",
-              "minecraft": "~1.21.1",
-              "java": ">=21",
-              "fabric-api": "*"
-            }
-          }
-          EOF
-
-      - name: Build Mod Jar
-        run: ./gradlew build -x test
-
-      - name: Upload Mod Jar
-        uses: actions/upload-artifact@v4
+      - run: chmod +x gradlew
+      - run: ./gradlew build
+      - uses: actions/upload-artifact@v4
         with:
-          name: MusoVisuals-1.21.1
+          name: MusoVisuals-Mod
           path: build/libs/*.jar
